@@ -11,6 +11,7 @@ import android.os.Bundle;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.view.LayoutInflater;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -24,6 +25,8 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.maps.android.clustering.Cluster;
+import com.google.maps.android.clustering.ClusterItem;
 import com.google.maps.android.clustering.ClusterManager;
 import com.zv.geochat.map.MapClusterItem;
 import com.zv.geochat.model.ChatMessage;
@@ -34,7 +37,7 @@ import java.util.List;
 public class MapActivity extends AppCompatActivity implements OnMapReadyCallback,
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener, LocationListener {
-    private static final String TAG ="MapActivity";
+    private static final String TAG = "MapActivity";
 
     public static final int PERMISSION_ACCESS_FINE_LOCATION = 1;
     private GoogleMap mMap;
@@ -93,6 +96,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
             }
         }
     }
+
     /**
      * Manipulates the map once available.
      * This callback is triggered when the map is ready to be used.
@@ -106,14 +110,64 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         mMap = googleMap;
         mMap.getUiSettings().setZoomControlsEnabled(true);
         clusterManager = new ClusterManager<MapClusterItem>(this, mMap);
+
+        final CustomClusterRenderer renderer = new CustomClusterRenderer(this, mMap, clusterManager);
+
+        clusterManager.setRenderer(renderer);
+
+        clusterManager.setOnClusterClickListener(
+                new ClusterManager.OnClusterClickListener<MapClusterItem>() {
+                    @Override
+                    public boolean onClusterClick(Cluster<MapClusterItem> cluster) {
+
+                        Toast.makeText(MapActivity.this, "Cluster click", Toast.LENGTH_SHORT).show();
+
+                        // if true, do not move camera
+
+                        return false;
+                    }
+                });
+
+        clusterManager.setOnClusterItemClickListener(
+                new ClusterManager.OnClusterItemClickListener<MapClusterItem>() {
+                    @Override
+                    public boolean onClusterItemClick(MapClusterItem clusterItem) {
+
+                        Toast.makeText(MapActivity.this, "Message: " + clusterItem.getmMessage(), Toast.LENGTH_SHORT).show();
+
+                        // if true, click handling stops here and do not show info view, do not move camera
+                        // you can avoid this by calling:
+                        // renderer.getMarker(clusterItem).showInfoWindow();
+
+                        return false;
+                    }
+                });
+
+        clusterManager.getMarkerCollection().
+                setOnInfoWindowAdapter(new CustomInfoViewAdapter(LayoutInflater.from(this)));
+
+        clusterManager.setOnClusterItemInfoWindowClickListener(
+                new ClusterManager.OnClusterItemInfoWindowClickListener<MapClusterItem>() {
+                    @Override
+                    public void onClusterItemInfoWindowClick(MapClusterItem stringClusterItem) {
+                        Toast.makeText(MapActivity.this, "Message: " + stringClusterItem.getmMessage(),
+                                Toast.LENGTH_SHORT).show();
+                    }
+                });
+
+        mMap.setOnInfoWindowClickListener(clusterManager);
+        mMap.setInfoWindowAdapter(clusterManager.getMarkerManager());
         mMap.setOnCameraChangeListener(clusterManager);
+        mMap.setOnMarkerClickListener(clusterManager);
         //---- create markers
         List<ChatMessage> chatMessageList = chatMessageStore.getList();
         for (ChatMessage chatMessage : chatMessageList) {
+            System.out.println("------------------------     " + chatMessage.getUserName());
             // do something with object
-            if (chatMessage.getBody().hasLocation()){
+            if (chatMessage.getBody().hasLocation()) {
                 MapClusterItem myItem = new MapClusterItem(chatMessage.getBody().getLat(),
-                        chatMessage.getBody().getLng());
+                        chatMessage.getBody().getLng(), chatMessage.getUserName(), chatMessage.getBody().getText());
+
                 //Log.v(TAG,"add cluster item: " + myItem);
                 clusterManager.addItem(myItem);
             }
@@ -127,7 +181,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
             mMap.setMyLocationEnabled(true);
         } else {
             ActivityCompat.requestPermissions(this,
-                    new String[] {
+                    new String[]{
                             Manifest.permission.ACCESS_FINE_LOCATION
                     }, PERMISSION_ACCESS_FINE_LOCATION);
         }
@@ -157,6 +211,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
 
 
     //------------GoogleApiClient-----------
+
     /**
      * Callback called when connected to GCore. Implementation of {@link GoogleApiClient.ConnectionCallbacks}.
      */
@@ -189,6 +244,7 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
         // Do nothing
     }
     //------------------------------------------
+
     /**
      * Implementation of {@link LocationListener}.
      */
@@ -203,5 +259,21 @@ public class MapActivity extends AppCompatActivity implements OnMapReadyCallback
             mMap.moveCamera(center);
             navigateToMyLocation = false;
         }
+    }
+}
+
+class StringClusterItem implements ClusterItem {
+
+    final String title;
+    final LatLng latLng;
+
+    public StringClusterItem(String title, LatLng latLng) {
+        this.title = title;
+        this.latLng = latLng;
+    }
+
+    @Override
+    public LatLng getPosition() {
+        return latLng;
     }
 }
